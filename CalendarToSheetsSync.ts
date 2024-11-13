@@ -30,9 +30,22 @@ function getEventDateRange(): [Date, Date] {
     return [start, end];
 }
 
-function getFolderId() {
-    return PropertiesService.getScriptProperties().getProperty("MONTHLY_SHEET_FOLDER_ID") ||
-        DriveApp.getRootFolder().getId();
+function getFolderByIdSafe(folderId: string):GoogleAppsScript.Drive.Folder {
+    if (!folderId) {
+        return null
+    }
+
+    try {
+        return DriveApp.getFolderById(folderId);
+    } catch {
+        console.log("Folder Id not found, using default");
+        return null;
+    }
+}
+
+function getFolder():GoogleAppsScript.Drive.Folder {
+    return getFolderByIdSafe(PropertiesService.getScriptProperties().getProperty("MONTHLY_SHEET_FOLDER_ID")) ||
+           DriveApp.getRootFolder();
 }
 
 function getCalendarFilterRe() {
@@ -73,10 +86,9 @@ function createMonthlyInvoiceSheet() {
     const dateRange = getEventDateRange();
     const fileName = `${Strings.sheetFileNamePrefix} ${dateRange[0].toLocaleDateString()} - ${dateRange[1].toLocaleDateString()}`;
 
-    const folder = DriveApp.getFolderById(getFolderId());
     const sheet = SpreadsheetApp.create(fileName);
     const file = DriveApp.getFileById(sheet.getId());
-    file.moveTo(folder);
+    file.moveTo(getFolder());
 
     console.log(`Created a new monthly sheet: ${getPath(file)}`)
 
