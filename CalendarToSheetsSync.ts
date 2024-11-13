@@ -1,3 +1,7 @@
+// Script Source:
+// https://github.com/H3mul/calendar-invoice-generator
+
+
 // Script operation:
 //   1. Gathers all events from matching calendars for the last month
 //   2. Creates a new monthly Sheet document in the specified Drive folder
