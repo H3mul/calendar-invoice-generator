@@ -125,7 +125,7 @@ function generateMonthlyInvoiceSheet(invoiceData: Map<string, CalendarData>) {
                 data.push([
                     e.getStartTime().toLocaleDateString(),
                     `${formatTimeString(e.getStartTime())}-${formatTimeString(e.getEndTime())}`,
-                    `${e.getTitle()}`,
+                    e.getTitle(),
                     `${(e.getEndTime().getTime() - e.getStartTime().getTime()) / (1000 * 60 * 60)}`,
                     "TRUE"
                 ]);
@@ -137,25 +137,24 @@ function generateMonthlyInvoiceSheet(invoiceData: Map<string, CalendarData>) {
         // Create a new sheet for the calendar
         const sheet = spreadsheet.insertSheet(d.calendar.getName());
 
-        // all the calendar data 
+        // Insert all the calendar data into cells
         sheet.getRange(1,1, data.length, data[0].length).setValues(data);
 
         // Add checkboxes to the inclusion column
-        sheet.getRange(2, headings.indexOf(Strings.headings.totalInclusion) + 1, data.length-2, 1)
+        sheet.getRange(2, headings.indexOf(Strings.headings.totalInclusion) + 1, data.length - 2, 1)
              .setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
 
         // Set first and last rows to bold
         const boldStyle = SpreadsheetApp.newTextStyle().setBold(true).build();
-        sheet.getRange(1,1, 1, data[0].length).setTextStyle(boldStyle);
-        sheet.getRange(data.length,1, 1, data[0].length).setTextStyle(boldStyle);
+        sheet.getRange(1, 1, 1, data[0].length).setTextStyle(boldStyle);
+        sheet.getRange(data.length, 1, 1, data[0].length).setTextStyle(boldStyle);
 
         sheet.setColumnWidths(1, headings.length, Settings.DEFAULT_COLUMN_WIDTH);
-        // Make Event Title column a bit wider
         sheet.setColumnWidth(headings.indexOf(Strings.headings.title) + 1, Settings.TITLE_COLUMN_WIDTH);
     });
 
     // Move the about sheet to the back and select the first sheet as active
-    spreadsheet.setActiveSheet(spreadsheet.getSheets()[0]);
+    spreadsheet.setActiveSheet(aboutSheet);
     spreadsheet.moveActiveSheet(spreadsheet.getNumSheets());
     spreadsheet.setActiveSheet(spreadsheet.getSheets()[0]);
 
@@ -163,7 +162,8 @@ function generateMonthlyInvoiceSheet(invoiceData: Map<string, CalendarData>) {
 }
 
 function onTrigger() {
-    console.log(`Starting monthly-calendar-summary script with properties: ${JSON.stringify(PropertiesService.getScriptProperties().getProperties())}`);
+    console.log(`Starting monthly-calendar-summary script with properties:`);
+    console.log(`   ${JSON.stringify(PropertiesService.getScriptProperties().getProperties())}`);
     const invoiceData = fetchCalendarData();
     generateMonthlyInvoiceSheet(invoiceData);
 }
