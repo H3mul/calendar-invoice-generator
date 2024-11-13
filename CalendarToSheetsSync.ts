@@ -13,18 +13,16 @@
 // This script is designed to fetch data from the whole previous month of the trigger time,
 // expected to be triggered using a monthly time trigger (eg, 1st of every month at 12am).
 
-import {settings} from './Settings';
-
 function getEventDateRange(): [Date, Date] {
     // Nth day of this month
     const end = new Date();
-    end.setDate(settings.DATE_RANGE_DAY);
+    end.setDate(Settings.DATE_RANGE_DAY);
     end.setHours(0,0,0,0);
 
     // Nth day of last month
     const start = new Date(end);
     start.setDate(0); // Shift to last month
-    start.setDate(settings.DATE_RANGE_DAY);
+    start.setDate(Settings.DATE_RANGE_DAY);
 
     return [start, end];
 }
@@ -36,57 +34,68 @@ type CalendarData = {
 
 function fetchCalendarData(): Map<string, CalendarData> {
     const invoiceData = new Map<string, CalendarData>();
-
     const calendars = CalendarApp.getAllCalendars()
-                                 .filter(c => settings.CALENDAR_NAME_FILTER.test(c.getName()));
-    
-    const dateRange = getEventDateRange();
+                                 .filter(c => Settings.CALENDAR_NAME_FILTER.test(c.getName()));
 
-
-    // DEBUG: temporarily only use first calendar instead of all
-    // const calendar = calendars[0];
     calendars.forEach(calendar => {
         invoiceData.set(
             calendar.getId(),
-            { calendar, events: calendar.getEvents(...dateRange) }
+            { calendar, events: calendar.getEvents(...getEventDateRange()) }
         );
     });
+
+    console.log(`Fetched last month's events for ${calendars.length} calendars`)
     return invoiceData;
+}
+
+function getFolderId() {
+    return PropertiesService.getScriptProperties().getProperty("MONTHLY_SHEET_FOLDER_ID") ||
+            Settings.MONTHLY_SHEET_FOLDER_ID;
+}
+
+function getPath(file: GoogleAppsScript.Drive.File) {
+    let path = file.getName();
+    let folder = file.getParents();
+    while(folder.hasNext()) {
+        path = `${folder.next()}/${path}`
+    }
+    return path;
 }
 
 function createMonthlyInvoiceSheet() {
     const dateRange = getEventDateRange();
-    const fileName = `Monthly Calendar Summary ${dateRange[0].toLocaleDateString()} - ${dateRange[1].toLocaleDateString()}`;
+    const fileName = `${Strings.sheetFileNamePrefix} ${dateRange[0].toLocaleDateString()} - ${dateRange[1].toLocaleDateString()}`;
 
-    const folder = DriveApp.getFolderById(settings.MONTHLY_SHEET_FOLDER_ID);
+    const folder = DriveApp.getFolderById(getFolderId());
     const sheet = SpreadsheetApp.create(fileName);
     const file = DriveApp.getFileById(sheet.getId());
+    file.moveTo(folder);
+
+    console.log(`Created a new monthly sheet: ${getPath(file)}`)
+
     return sheet
 }
 
 function formatTimeString(dateSomething: any) {
-    return new Date(dateSomething).toLocaleTimeString(settings.TIME_LOCALE, settings.TIME_FORMAT);
+    return new Date(dateSomething).toLocaleTimeString(Settings.TIME_LOCALE, Settings.TIME_FORMAT);
 }
 
 function generateMonthlyInvoiceSheet(invoiceData: Map<string, CalendarData>) {
-    // DEBUG: temporarily grab test sheet instead of creating new one
-    // const spreadsheet = createMonthlyInvoiceSheet();
-    const spreadsheet = SpreadsheetApp.openById(settings.MONTHLY_SHEET_TEST_FILE_ID);
-
-    // DEBUG: temporarily delete all other sheets
-    spreadsheet.getSheets()
-        .filter(s => s.getName() !== "Notes")
-        .forEach(s => spreadsheet.deleteSheet(s));
-
+    const spreadsheet = createMonthlyInvoiceSheet();
     const notesSheet = spreadsheet.getActiveSheet();
 
-    // DEBUG: temporarily clear sheet
-    notesSheet.clear();
-    notesSheet.setName("Notes");
-    notesSheet.getRange("A1").setValue(`This Sheet has been created using a periodic App Script`)
-    notesSheet.getRange("A2").setValue(`on ${new Date().toString()}`);
+    // Add a readme sheet
+    notesSheet.setName(Strings.notesSheetTitle);
+    notesSheet.getRange("A1").setValue(Strings.sheetGenerationInfo);
+    notesSheet.getRange("A2").setValue(new Date().toString());
 
-    const headings = [ "Day", "Timestamps", "Event Title", "Hours Count", "Include In Total" ];
+    const headings = [
+        Strings.headings.day,
+        Strings.headings.time,
+        Strings.headings.title,
+        Strings.headings.hours,
+        Strings.headings.totalInclusion
+    ];
 
     invoiceData.values().forEach(d => {
         const data:Array<Array<any>> = [headings];
@@ -106,27 +115,31 @@ function generateMonthlyInvoiceSheet(invoiceData: Map<string, CalendarData>) {
         // Append hours total row
         data.push(["", "", "Total: ", `=SUM(ARRAYFORMULA(D2:D${data.length}*E2:E${data.length}))`, ""]);
 
-
+        // Create a new sheet for the calendar
         const sheet = spreadsheet.insertSheet(d.calendar.getName());
 
-        // Add data
+        // all the calendar data 
         sheet.getRange(1,1, data.length, data[0].length).setValues(data);
 
-        // Add validation to the inclusion column (note: assume its the last column)
-        sheet.getRange(2, headings.length, data.length-2, 1).setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+        // Add checkboxes to the inclusion column
+        sheet.getRange(2, headings.indexOf(Strings.headings.totalInclusion) + 1, data.length-2, 1)
+             .setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
 
         // Set first and last rows to bold
         const boldStyle = SpreadsheetApp.newTextStyle().setBold(true).build();
         sheet.getRange(1,1, 1, data[0].length).setTextStyle(boldStyle);
         sheet.getRange(data.length,1, 1, data[0].length).setTextStyle(boldStyle);
 
-        sheet.setColumnWidths(1, headings.length, 100);
+        sheet.setColumnWidths(1, headings.length, Settings.DEFAULT_COLUMN_WIDTH);
         // Make Event Title column a bit wider
-        sheet.setColumnWidth(3, 175);
+        sheet.setColumnWidth(headings.indexOf(Strings.headings.title) + 1, Settings.TITLE_COLUMN_WIDTH);
     });
+
+    console.log("Finished populating monthly sheet with calendar data")
 }
 
 function onTrigger() {
+    console.log(`Starting monthly-calendar-summary-script with properties: ${JSON.stringify(PropertiesService.getScriptProperties().getProperties())}`);
     const invoiceData = fetchCalendarData();
     generateMonthlyInvoiceSheet(invoiceData);
 }
