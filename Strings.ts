@@ -1,8 +1,8 @@
 namespace Strings {
     export const sheetFileNamePrefix = "Monthly Calendar Summary";
-    export const notesSheetTitle = "Notes";
+    export const aboutSheetTitle = "About";
     export const sheetGenerationInfo = `
-This Sheet has been created using a periodic App Script.
+This SpreadSheet has been created using a periodic App Script
 
 Script location:
 https://script.google.com/u/2/home/projects/1GlAsqhUGAQZv-amVUQP9La-E-rBcPBtTw_O0c8OTZx2ufL7ddiwvxPjU
