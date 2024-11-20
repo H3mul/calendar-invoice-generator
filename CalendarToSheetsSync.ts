@@ -54,10 +54,10 @@ function getCalendarFilterRe() {
 
 type CalendarData = {
     calendar: GoogleAppsScript.Calendar.Calendar;
-    events?: GoogleAppsScript.Calendar.CalendarEvent[];
+    events: GoogleAppsScript.Calendar.CalendarEvent[];
 }
 
-function fetchCalendarData(): Map<string, CalendarData> {
+function fetchCalendarData(dateRange: [Date, Date]): Map<string, CalendarData> {
     const invoiceData = new Map<string, CalendarData>();
     const calendars = CalendarApp.getAllCalendars()
                                  .filter(c => getCalendarFilterRe().test(c.getName()));
@@ -65,12 +65,21 @@ function fetchCalendarData(): Map<string, CalendarData> {
     calendars.forEach(calendar => {
         invoiceData.set(
             calendar.getId(),
-            { calendar, events: calendar.getEvents(...getEventDateRange()) }
+            { calendar, events: calendar.getEvents(...dateRange) }
         );
     });
 
     console.log(`Fetched last month's events for ${calendars.length} calendars`)
     return invoiceData;
+}
+
+function iterToArray(iter) {
+    let array = [];
+
+    while(iter.hasNext()) {
+        array.push(iter.next());
+    }
+    return array;
 }
 
 function getPath(file: GoogleAppsScript.Drive.File) {
@@ -82,8 +91,8 @@ function getPath(file: GoogleAppsScript.Drive.File) {
     return path;
 }
 
-function createMonthlyInvoiceSheet() {
-    const dateRange = getEventDateRange();
+
+function createMonthlyInvoiceSheet(dateRange: [Date, Date]) {
     const fileName = `${Strings.sheetFileNamePrefix} ${dateRange[0].toLocaleDateString()} - ${dateRange[1].toLocaleDateString()}`;
 
     const sheet = SpreadsheetApp.create(fileName);
@@ -99,14 +108,76 @@ function formatTimeString(dateSomething: any) {
     return new Date(dateSomething).toLocaleTimeString(Settings.TIME_LOCALE, Settings.TIME_FORMAT);
 }
 
-function generateMonthlyInvoiceSheet(invoiceData: Map<string, CalendarData>) {
-    const spreadsheet = createMonthlyInvoiceSheet();
+function checkFileExists(fileId: string) {
+    let exists = false;
+    try {
+        const file = DriveApp.getFileById(fileId);
+        exists = !file.isTrashed();
+    } finally {
+        return exists
+    }
+}
+
+function installSheetMenuCreationTrigger(spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet):void {
+    const folderSheetIds = iterToArray(getFolder().getFiles())
+                            .filter(f => f.getMimeType() == MimeType.GOOGLE_SHEETS)
+                            .map(f => f.getId());
+
+    // Clean up existing triggers
+    ScriptApp.getProjectTriggers().filter(t => 
+            // Our menu creation method
+            t.getHandlerFunction() == "createCalendarSheetMenu" &&
+            // File has been deleted/trashed, or it is our current sheet
+            (!checkFileExists(t.getTriggerSourceId()) || spreadsheet.getId() == t.getTriggerSourceId()))
+        .forEach(t => ScriptApp.deleteTrigger(t));
+
+    ScriptApp.newTrigger("createCalendarSheetMenu")
+             .forSpreadsheet(spreadsheet.getId())
+             .onOpen().create();
+}
+
+function createCalendarSheetMenu(event: GoogleAppsScript.Events.SheetsOnOpen) {
+    event.source.addMenu(
+        Strings.calendarAppMenuTitle,
+        [ {name: "Regenerate this sheet", functionName: "triggerSheetRegeneration"} ]
+    );
+}
+
+function triggerSheetRegeneration() {
+    const spreadsheet = SpreadsheetApp.getActive();
+    console.log(`Regeneration triggered from sheet: ${spreadsheet.getId()}`);
+
+    const dateRange = spreadsheet.getNamedRanges()
+                        ?.find(r => r.getName() == Settings.sheetGenerationTimeRangeName)
+                        ?.getRange()
+                        ?.getValues()
+                        .flat()
+                        .map(s => new Date(s)) as [Date, Date];
+
+    if (dateRange) {
+        console.log(`Detected generation date range, triggering generation on ${JSON.stringify(dateRange)}`);
+        generateForDates(dateRange);
+    } else {
+        console.log(`Unable to locate generation date range, calculating it automatically and triggering generation`);
+        generate();
+    }
+}
+
+function generateMonthlyInvoiceSheet(invoiceData: Map<string, CalendarData>, dateRange: [Date, Date]):void {
+    const spreadsheet = createMonthlyInvoiceSheet(dateRange);
     const aboutSheet = spreadsheet.getActiveSheet();
 
     // Add a readme sheet
     aboutSheet.setName(Strings.aboutSheetTitle);
     aboutSheet.getRange("A1").setValue(Strings.sheetGenerationInfo);
     aboutSheet.getRange("A2").setValue(new Date().toString());
+
+
+    aboutSheet.getRange("A4").setValue(Strings.sheetTimeRangeText);
+    const [ start, end ] = getEventDateRange();
+    aboutSheet.getRange("A5").setValue(start.toString());
+    aboutSheet.getRange("A6").setValue(end.toString());
+    spreadsheet.setNamedRange(Settings.sheetGenerationTimeRangeName, aboutSheet.getRange("A5:A6"));
 
     const headings = [
         Strings.headings.day,
@@ -158,12 +229,24 @@ function generateMonthlyInvoiceSheet(invoiceData: Map<string, CalendarData>) {
     spreadsheet.moveActiveSheet(spreadsheet.getNumSheets());
     spreadsheet.setActiveSheet(spreadsheet.getSheets()[0]);
 
+    installSheetMenuCreationTrigger(spreadsheet);
+
     console.log("Finished populating monthly sheet with calendar data")
 }
 
-function onTrigger() {
+function generateForDates(dateRange: [Date,Date]) {
     console.log(`Starting monthly-calendar-summary script with properties:`);
+    console.log(`   dateRange: ${JSON.stringify(dateRange)}`);
     console.log(`   ${JSON.stringify(PropertiesService.getScriptProperties().getProperties())}`);
-    const invoiceData = fetchCalendarData();
-    generateMonthlyInvoiceSheet(invoiceData);
+    const invoiceData = fetchCalendarData(dateRange);
+    generateMonthlyInvoiceSheet(invoiceData, dateRange);
+}
+
+function generate() {
+    generateForDates(getEventDateRange());
+}
+
+function onTimeTrigger() {
+    console.log(`Monthly time trigger`);
+    generate();    
 }

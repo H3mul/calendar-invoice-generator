@@ -10,6 +10,10 @@ https://github.com/H3mul/calendar-invoice-generator
 
 Sheet generation timestamp:`;
 
+    export const sheetTimeRangeText = "This generation's time range (this data is used for regenerating this sheet):";
+
+    export const calendarAppMenuTitle = "Monthly Calendar Summary Generator";
+
     export const headings = {
         day: "Day",
         time: "Timestamps",

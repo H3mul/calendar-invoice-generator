@@ -5,4 +5,7 @@ namespace Settings {
 
     export const DEFAULT_COLUMN_WIDTH = 100;
     export const TITLE_COLUMN_WIDTH = 175;
+
+    // Do not change, or regeneration of old sheets won't work
+    export const sheetGenerationTimeRangeName = "GatheredCalendarDataDateRange";
 }
