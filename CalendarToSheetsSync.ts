@@ -59,14 +59,18 @@ type CalendarData = {
 
 function fetchCalendarData(dateRange: [Date, Date]): Map<string, CalendarData> {
     const invoiceData = new Map<string, CalendarData>();
-    const calendars = CalendarApp.getAllCalendars()
-                                 .filter(c => getCalendarFilterRe().test(c.getName()));
+    const calendars = CalendarApp.getAllCalendars();
+    console.info(`Unfiltered fetched calendar names: ${calendars.map(c => c.getName()).join(', ')}`);
 
-    calendars.forEach(calendar => {
-        invoiceData.set(
-            calendar.getId(),
-            { calendar, events: calendar.getEvents(...dateRange) }
-        );
+    const filteredCalendars = calendars.filter(c => getCalendarFilterRe().test(c.getName()))
+    console.info(`Filtered fetched calendar names: ${filteredCalendars.map(c => c.getName()).join(', ')}`);
+
+    filteredCalendars
+        .forEach(calendar => {
+            invoiceData.set(
+                calendar.getId(),
+                { calendar, events: calendar.getEvents(...dateRange) }
+            );
     });
 
     console.log(`Fetched last month's events for ${calendars.length} calendars`)
