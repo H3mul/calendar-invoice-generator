@@ -215,9 +215,11 @@ function generateMonthlyInvoiceSheet(invoiceData: Map<string, CalendarData>, dat
         // Insert all the calendar data into cells
         sheet.getRange(1,1, data.length, data[0].length).setValues(data);
 
-        // Add checkboxes to the inclusion column
-        sheet.getRange(2, headings.indexOf(Strings.headings.totalInclusion) + 1, data.length - 2, 1)
-             .setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+        if (data.length > 2) {
+            // Add checkboxes to the inclusion column
+            sheet.getRange(2, headings.indexOf(Strings.headings.totalInclusion) + 1, data.length - 2, 1)
+                .setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
+        }
 
         // Set first and last rows to bold
         const boldStyle = SpreadsheetApp.newTextStyle().setBold(true).build();
