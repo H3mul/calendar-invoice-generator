@@ -122,17 +122,23 @@ function checkFileExists(fileId: string) {
     }
 }
 
+// Apps Script limits the total number of triggers, so only this many of the newest sheets keep their menu trigger
+const MAX_SHEETS_WITH_MENU_TRIGGER = 3;
+
 function installSheetMenuCreationTrigger(spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet):void {
-    const folderSheetIds = iterToArray(getFolder().getFiles())
+    // Trashed files aren't listed, so their triggers fall outside the kept set
+    const keptSheetIds = iterToArray(getFolder().getFiles())
                             .filter(f => f.getMimeType() == MimeType.GOOGLE_SHEETS)
+                            .sort((a, b) => b.getDateCreated().getTime() - a.getDateCreated().getTime())
+                            .slice(0, MAX_SHEETS_WITH_MENU_TRIGGER)
                             .map(f => f.getId());
 
     // Clean up existing triggers
-    ScriptApp.getProjectTriggers().filter(t => 
+    ScriptApp.getProjectTriggers().filter(t =>
             // Our menu creation method
             t.getHandlerFunction() == "createCalendarSheetMenu" &&
-            // File has been deleted/trashed, or it is our current sheet
-            (!checkFileExists(t.getTriggerSourceId()) || spreadsheet.getId() == t.getTriggerSourceId()))
+            // Not among the newest sheets (incl. deleted/trashed), or it is our current sheet (re-created below)
+            (!keptSheetIds.includes(t.getTriggerSourceId()) || spreadsheet.getId() == t.getTriggerSourceId()))
         .forEach(t => ScriptApp.deleteTrigger(t));
 
     ScriptApp.newTrigger("createCalendarSheetMenu")
